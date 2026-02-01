@@ -1,0 +1,161 @@
+name: Build & Release Kindle Package
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+env:
+  TOOLCHAIN_TARGET: kindlehf
+  TOOLCHAIN_PREFIX: arm-kindlehf-linux-gnueabihf
+
+jobs:
+  build-kindle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build zip libarchive-dev nettle-dev
+
+      - name: Cache toolchain + SDK
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/x-tools
+          key: kindle-toolchain-v1
+
+      - name: Download pre-built koxtoolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://github.com/koreader/koxtoolchain/releases/download/2025.05/kindlehf.tar.gz
+          tar xzf kindlehf.tar.gz -C ~
+          rm kindlehf.tar.gz
+
+      - name: Install kindle-sdk
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          git clone --recursive --depth=1 https://github.com/KindleModding/kindle-sdk.git /tmp/kindle-sdk
+          cd /tmp/kindle-sdk
+          ./gen-sdk.sh ${{ env.TOOLCHAIN_TARGET }}
+
+      - name: Cross-compile for Kindle
+        run: |
+          meson setup builddir-kindle \
+            --cross-file ~/x-tools/${{ env.TOOLCHAIN_PREFIX }}/meson-crosscompile.txt \
+            -Dc_args=-DKINDLE
+          ninja -C builddir-kindle
+
+      - name: Package KUAL extension
+        run: |
+          EXTENSION_NAME="manga-reader"
+          OUTPUT_DIR="kindle-package"
+          EXT_DIR="$OUTPUT_DIR/extensions/$EXTENSION_NAME"
+
+          mkdir -p "$EXT_DIR/bin"
+          cp "builddir-kindle/manga-reader" "$EXT_DIR/bin/manga-reader"
+
+          cat > "$EXT_DIR/config.xml" << 'CONFIGXML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <extension>
+            <information>
+              <name>Manga Reader</name>
+              <version>1.0</version>
+              <author>Daniel Griffiths</author>
+              <id>manga-reader</id>
+            </information>
+            <menus>
+              <menu type="json" dynamic="false">menu.json</menu>
+            </menus>
+          </extension>
+          CONFIGXML
+
+          cat > "$EXT_DIR/menu.json" << 'MENUJSON'
+          {
+            "items": [
+              {
+                "name": "Manga Reader",
+                "priority": 1,
+                "items": [
+                  {
+                    "name": "Start Manga Reader",
+                    "priority": 1,
+                    "action": "/mnt/us/extensions/manga-reader/bin/start.sh",
+                    "exitmenu": true
+                  },
+                  {
+                    "name": "Stop Manga Reader",
+                    "priority": 2,
+                    "action": "/mnt/us/extensions/manga-reader/bin/stop.sh"
+                  },
+                  {
+                    "name": "Restore Previous Version",
+                    "priority": 3,
+                    "action": "/mnt/us/extensions/manga-reader/bin/restore.sh"
+                  }
+                ]
+              }
+            ]
+          }
+          MENUJSON
+
+          cat > "$EXT_DIR/bin/start.sh" << 'STARTSH'
+          #!/bin/sh
+          DIR="$(cd "$(dirname "$0")/.." && pwd)"
+          "$DIR/bin/stop.sh" 2>/dev/null || true
+          export DISPLAY=:0
+          export HOME=/mnt/us
+          mkdir -p "$HOME/.cache/manga-reader"
+          "$DIR/bin/manga-reader" &
+          echo $! > /tmp/manga-reader.pid
+          STARTSH
+
+          cat > "$EXT_DIR/bin/stop.sh" << 'STOPSH'
+          #!/bin/sh
+          if [ -f /tmp/manga-reader.pid ]; then
+            kill "$(cat /tmp/manga-reader.pid)" 2>/dev/null || true
+            rm -f /tmp/manga-reader.pid
+          fi
+          STOPSH
+
+          cat > "$EXT_DIR/bin/restore.sh" << 'RESTORESH'
+          #!/bin/sh
+          DIR="$(cd "$(dirname "$0")/.." && pwd)"
+          BIN="$DIR/bin/manga-reader"
+          BAK="$DIR/bin/manga-reader.bak"
+          if [ -f "$BAK" ]; then
+            "$DIR/bin/stop.sh" 2>/dev/null || true
+            cp "$BAK" "$BIN"
+            chmod +x "$BIN"
+            echo "Previous version restored. Use Start Manga Reader to launch."
+          else
+            echo "No backup found — nothing to restore."
+          fi
+          RESTORESH
+
+          chmod +x "$EXT_DIR/bin/start.sh" "$EXT_DIR/bin/stop.sh" "$EXT_DIR/bin/restore.sh" "$EXT_DIR/bin/manga-reader"
+          (cd "$OUTPUT_DIR" && zip -r "../$EXTENSION_NAME-kindle.zip" extensions/)
+
+      - name: Delete existing latest release
+        run: gh release delete latest --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete latest tag
+        run: git push --delete origin latest || true
+
+      - name: Create latest release
+        run: |
+          gh release create latest manga-reader-kindle.zip \
+            --title "Latest Build" \
+            --notes "Automated Kindle build from \`$(git rev-parse --short HEAD)\` on $(date -u +%Y-%m-%d).
+
+          Install on a jailbroken Kindle with KUAL: unzip into Kindle USB root and launch from KUAL menu." \
+            --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
