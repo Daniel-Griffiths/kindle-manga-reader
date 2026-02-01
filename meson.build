@@ -15,7 +15,10 @@ if git_sha.returncode() == 0
 else
   build_commit = 'unknown'
 endif
-add_project_arguments('-DBUILD_COMMIT="' + build_commit + '"', language : 'c')
+add_project_arguments(
+  '-DBUILD_COMMIT="' + build_commit + '"',
+  '-Wno-deprecated-declarations',
+  language : 'c')
 
 sources = files(
   'src/main.c',

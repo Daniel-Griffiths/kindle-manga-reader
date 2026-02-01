@@ -19,12 +19,12 @@ typedef int LIPCcode;
 #define LIPC_OK 0
 
 static void *lipc_handle = NULL;
-static LIPC *(*lipc_open)(const char *) = NULL;
 static void (*lipc_close)(LIPC *) = NULL;
 static LIPCcode (*lipc_set_int_property)(LIPC *, const char *, const char *, int) = NULL;
 static LIPCcode (*lipc_get_int_property)(LIPC *, const char *, const char *, int *) = NULL;
 static LIPC *lipc_connection = NULL;
 
+#ifdef KINDLE
 /* Detect the correct sysfs file for this Kindle model */
 static gboolean detect_brightness_file(void) {
     const char *paths[] = {
@@ -45,6 +45,8 @@ static gboolean detect_brightness_file(void) {
 }
 
 /* Initialize LIPC library connection */
+/* (only used on Kindle — detect_brightness_file and init_lipc
+   are called from the #ifdef KINDLE block in brightness_init) */
 static gboolean init_lipc(void) {
     /* Try to load liblipc.so dynamically */
     lipc_handle = dlopen("liblipc.so.1", RTLD_LAZY);
@@ -61,7 +63,7 @@ static gboolean init_lipc(void) {
 
     /* Load function pointers - try LipcOpenNoName first */
     LIPC *(*lipc_open_no_name)(void) = dlsym(lipc_handle, "LipcOpenNoName");
-    lipc_open = dlsym(lipc_handle, "LipcOpen");
+    LIPC *(*lipc_open)(const char *) = dlsym(lipc_handle, "LipcOpen");
     lipc_close = dlsym(lipc_handle, "LipcClose");
     lipc_set_int_property = dlsym(lipc_handle, "LipcSetIntProperty");
     lipc_get_int_property = dlsym(lipc_handle, "LipcGetIntProperty");
@@ -100,6 +102,7 @@ static gboolean init_lipc(void) {
     lipc_handle = NULL;
     return FALSE;
 }
+#endif /* KINDLE */
 
 /* Read brightness using lipc (preferred) or sysfs fallback */
 static int read_brightness(void) {

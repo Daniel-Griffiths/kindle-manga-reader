@@ -1,6 +1,7 @@
 #include "settings_view.h"
 #include "widgets.h"
 #include "../app.h"
+#include "../updater.h"
 #include "../util/database.h"
 #include "../util/cache.h"
 #include <glib/gstdio.h>
@@ -185,6 +186,12 @@ static void on_layout_grid_clicked(GtkWidget *button, gpointer user_data) {
     gtk_button_set_relief(GTK_BUTTON(list_btn), GTK_RELIEF_NONE);
 }
 
+static void on_check_update_clicked(GtkWidget *button, gpointer user_data) {
+    (void)button;
+    (void)user_data;
+    updater_check(app_get(), TRUE);
+}
+
 static void on_back_clicked(GtkWidget *button, gpointer user_data) {
     (void)button;
     (void)user_data;
@@ -278,6 +285,24 @@ GtkWidget *settings_view_new(void) {
     gtk_box_pack_start(GTK_BOX(cache_box), cache_btn, FALSE, FALSE, 4);
     
     gtk_box_pack_start(GTK_BOX(options), cache_box, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(options), widgets_separator_new(), FALSE, FALSE, 8);
+
+    /* Check for Updates */
+    GtkWidget *update_box = gtk_vbox_new(FALSE, 4);
+    GtkWidget *update_label = widgets_label_new("Check for Updates", EINK_FONT_MED_BOLD);
+    gtk_misc_set_alignment(GTK_MISC(update_label), 0.0, 0.5);
+    gtk_box_pack_start(GTK_BOX(update_box), update_label, FALSE, FALSE, 0);
+
+    GtkWidget *update_desc = widgets_label_new(
+        "Check GitHub for a newer version", EINK_FONT_SMALL);
+    gtk_misc_set_alignment(GTK_MISC(update_desc), 0.0, 0.5);
+    gtk_box_pack_start(GTK_BOX(update_box), update_desc, FALSE, FALSE, 0);
+
+    GtkWidget *update_btn = widgets_button_new("Check for Updates");
+    g_signal_connect(update_btn, "clicked", G_CALLBACK(on_check_update_clicked), NULL);
+    gtk_box_pack_start(GTK_BOX(update_box), update_btn, FALSE, FALSE, 4);
+
+    gtk_box_pack_start(GTK_BOX(options), update_box, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(vbox), options, FALSE, FALSE, 0);
 

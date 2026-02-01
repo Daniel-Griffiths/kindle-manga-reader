@@ -348,7 +348,7 @@ GtkWidget *search_view_new(void) {
     g_signal_connect(exit_btn, "clicked", G_CALLBACK(on_exit_clicked), NULL);
     gtk_box_pack_end(GTK_BOX(header), exit_btn, FALSE, FALSE, 0);
 
-    GtkWidget *settings_btn = widgets_icon_button_new("⚙");
+    GtkWidget *settings_btn = widgets_button_new("Settings");
     g_signal_connect(settings_btn, "clicked", G_CALLBACK(on_settings_clicked), NULL);
     gtk_box_pack_end(GTK_BOX(header), settings_btn, FALSE, FALSE, 4);
     

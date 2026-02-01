@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     app_show_search(app);
 
     /* Check for updates in the background */
-    updater_check(app);
+    updater_check(app, FALSE);
 
     gtk_widget_show_all(app->window);
 

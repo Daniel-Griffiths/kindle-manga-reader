@@ -760,8 +760,7 @@ GtkWidget *reader_view_new(const char *chapter_url) {
     /* Show loading and start bulk download */
     show_loading(data);
 
-    data->prefetch_thread = g_thread_create(prefetch_thread_func, data,
-                                              TRUE, NULL);
+    data->prefetch_thread = g_thread_create(prefetch_thread_func, data, TRUE, NULL);
 
     return vbox;
 }

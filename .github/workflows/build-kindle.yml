@@ -1,4 +1,4 @@
-name: Build & Release Kindle Package
+name: Build & Release
 
 on:
   push:
@@ -139,7 +139,53 @@ jobs:
           RESTORESH
 
           chmod +x "$EXT_DIR/bin/start.sh" "$EXT_DIR/bin/stop.sh" "$EXT_DIR/bin/restore.sh" "$EXT_DIR/bin/manga-reader"
-          (cd "$OUTPUT_DIR" && zip -r "../$EXTENSION_NAME-kindle.zip" extensions/)
+          (cd "$OUTPUT_DIR" && zip -r "../manga-reader-kindle.zip" extensions/)
+
+      - name: Upload Kindle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manga-reader-kindle
+          path: manga-reader-kindle.zip
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install meson ninja gtk+ curl libxml2 sqlite
+
+      - name: Build for macOS
+        run: |
+          export PKG_CONFIG_PATH="/opt/homebrew/opt/curl/lib/pkgconfig:/opt/homebrew/opt/libxml2/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          meson setup builddir
+          ninja -C builddir
+
+      - name: Package macOS build
+        run: |
+          mkdir -p mac-package
+          cp builddir/manga-reader mac-package/
+          (cd mac-package && zip -r "../manga-reader-mac.zip" manga-reader)
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manga-reader-mac
+          path: manga-reader-mac.zip
+
+  release:
+    needs: [build-kindle, build-mac]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Delete existing latest release
         run: gh release delete latest --yes || true
@@ -151,11 +197,14 @@ jobs:
 
       - name: Create latest release
         run: |
-          gh release create latest manga-reader-kindle.zip \
+          gh release create latest \
+            artifacts/manga-reader-kindle/manga-reader-kindle.zip \
+            artifacts/manga-reader-mac/manga-reader-mac.zip \
             --title "Latest Build" \
-            --notes "Automated Kindle build from \`$(git rev-parse --short HEAD)\` on $(date -u +%Y-%m-%d).
+            --notes "Automated build from \`$(git rev-parse --short HEAD)\` on $(date -u +%Y-%m-%d).
 
-          Install on a jailbroken Kindle with KUAL: unzip into Kindle USB root and launch from KUAL menu." \
+          **Kindle**: Unzip into Kindle USB root and launch from KUAL menu.
+          **macOS**: Unzip and run the binary." \
             --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
